@@ -122,6 +122,7 @@ get_options() {
                         OPTIONS=$NIGHTOPTIONS
 			MODE="night"
                 fi
+		OPTIONS="$OPTIONS $DEFAULTOPTIONS"
                 echo "Switching mode to $MODE - $OPTIONS"
 		stop_picam
         fi
