@@ -110,9 +110,17 @@ get_options() {
 	fi
 	echo "Size: $SIZE"
 	get_mode
+	if [ "$MODE" == "day" ]; then
+		SIZETHRESHOLD=$DAYTONIGHT
+	elif [ "$MODE" == "night" ]; then
+		SIZETHRESHOLD=$NIGHTTODAY
+	else
+		SIZETHRESHOLD=$DAYTONIGHT
+	fi
 	if [ ! "$SIZE" == "" ] && [ $SIZE -gt 0 ]; then
 		echo "$TIMESTAMP:$SIZE" > /tmp/$MODE.log
 	fi
+	echo "Checking if $SIZE is less than $SIZETHRESHOLD.  If yes, switching out of $MODE mode."
         if [ ! "$SIZE" == "" ] && [ $SIZE -lt $SIZETHRESHOLD ] && [ $SIZE -gt 0 ]; then
 		MODECHANGE=1
                 if [ $NIGHTMODE -eq 1 ]; then
