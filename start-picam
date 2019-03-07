@@ -87,11 +87,18 @@ get_options() {
         rm /tmp/test.jpg
 	COUNT=0
 	echo "Checking image size to estimate night or day change"
-        nice -n 15 ffmpeg -y -i rtsp://127.0.0.1/live/picam -vframes 1 -vsync 2 -q:v 2 -an /tmp/test.jpg > /dev/null 2>&1 &
+        ffmpeg -rtsp_transport tcp -y -i rtsp://127.0.0.1/live/picam -vframes 1 -vsync 2 -q:v 2 -an /tmp/test.jpg > /dev/null 2>&1 &
+	TEN=1
 	while [ $COUNT -lt $FFMPEGTIMEOUT ] && [ ! -f /tmp/test.jpg ]; do
-		echo -n "."
+		if [ $TEN -eq 10 ]; then
+			echo -n "|"
+			TEN=0
+		else
+			echo -n "."
+		fi
 		sleep 1
 		COUNT=$(($COUNT+1))
+		TEN=$((TEN+1))
 	done
 	echo
 	if [ ! "$(pidof ffmpeg)" == "" ]; then
