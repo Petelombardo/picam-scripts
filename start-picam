@@ -68,6 +68,11 @@ prevent_looping() {
 			OVERRIDEOPTIONS=1
 		fi
 		OPTIONS="$OPTIONS $DEFAULTOPTIONS"
+		NEWMODE=$MODE
+		get_mode
+		if [ ! "$MODE" == "$NEWMODE" ]; then
+			stop_picam
+		fi
 	fi
 }
 
