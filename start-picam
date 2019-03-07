@@ -1,0 +1,174 @@
+#!/bin/bash
+PATH=$PATH:/usr/bin:/usr/sbin:/bin:/sbin
+
+source /scripts/picam.config
+# Edit the custom settings in the picam.config file
+
+TIMESTAMP=$(date '+%s')
+OPTIONS="$DAYOPTIONS $DEFAULTOPTIONS"
+MODECHANGE=0
+MODE="day"
+OVERRIDEOPTIONS=0
+
+stop_picam() {
+	echo "Stopping picam"
+	kill -9 `pidof picam` > /dev/null 2>&1
+	TIMER=0
+	while [ ! "$(pidof picam)" == "" ] || [ $TIMER -gt 5 ];
+	do
+		echo -n "."
+		sleep 1
+		TIMER=$((TIMER+1))
+	done
+	echo ""
+	if [ $TIMER -gt 5 ]; then
+		echo "Error stopping picam"
+	fi
+}
+
+stop_ffmpeg() {
+        echo "Stopping ffmpeg"
+        kill -9 `pidof ffmpeg` > /dev/null 2>&1
+        TIMER=0
+        while [ ! "$(pidof ffmpeg)" == "" ] || [ $TIMER -gt 5 ];
+        do
+                echo -n "."
+                sleep 1
+                TIMER=$((TIMER+1))
+        done
+        echo ""
+        if [ $TIMER -gt 5 ]; then
+                echo "Error stopping ffmpeg"
+        fi
+}
+
+prevent_looping() {
+	DAYTIMESTAMP=$(cat /tmp/day.log | cut -d':' -f1)
+	NIGHTTIMESTAMP=$(cat /tmp/night.log | cut -d':' -f1)
+	DAYSIZE=$(cat /tmp/day.log | cut -d':' -f2)
+	NIGHTSIZE=$(cat /tmp/night.log | cut -d':' -f2)
+	if [ ! "$DAYTIMESTAMP" == "" ] && [ ! "$NIGHTTIMESTAMP" == "" ] && [ $DAYTIMESTAMP -gt $NIGHTTIMESTAMP ]; then
+		ELAPSED=$((DAYTIMESTAMP-NIGHTTIMESTAMP))
+		RECENT=$DAYTIMESTAMP
+	elif [ ! "$DAYTIMESTAMP" == "" ] && [ ! "$NIGHTTIMESTAMP" == "" ] && [ $DAYTIMESTAMP -lt $NIGHTTIMESTAMP ]; then
+		ELAPSED=$((NIGHTTIMESTAMP-DAYTIMESTAMP))
+		RECENT=$NIGHTTIMESTAMP
+	else
+		ELAPSED=600
+		RECENT=0
+	fi
+	if [ $ELAPSED -le 300 ] && [ $((TIMESTAMP-RECENT)) -le 300 ]; then
+		if [ ! "$NIGHTSIZE" == "" ] && [ ! "$DAYSIZE" == "" ] && [ $NIGHTSIZE -gt $DAYSIZE ]; then
+			MODE="night"
+			OPTIONS=$NIGHTOPTIONS
+			OVERRIDEOPTIONS=1
+		elif  [ ! "$NIGHTSIZE" == "" ] && [ ! "$DAYSIZE" == "" ] && [ $NIGHTSIZE -le $DAYSIZE ]; then
+			MODE="day"
+			OPTIONS=$DAYOPTIONS
+			OVERRIDEOPTIONS=1
+		fi
+		OPTIONS="$OPTIONS $DEFAULTOPTIONS"
+	fi
+}
+
+get_mode() {
+	echo "Checking for night mode: $NIGHTOPTIONS"
+	NIGHTMODE=$(ps -A S | grep picam | grep -F -e "$NIGHTOPTIONS" | wc -l)
+        if [ $NIGHTMODE -gt 0 ]; then
+                MODE="night"
+        else
+                MODE="day"
+        fi
+	echo "Current mode: $MODE"
+}
+
+
+get_options() {
+        rm /tmp/test.jpg
+	COUNT=0
+	echo "Checking image size to estimate night or day change"
+        nice -n 15 ffmpeg -y -i rtsp://127.0.0.1/live/picam -vframes 1 -vsync 2 -q:v 2 -an /tmp/test.jpg > /dev/null 2>&1 &
+	while [ $COUNT -lt $FFMPEGTIMEOUT ] && [ ! -f /tmp/test.jpg ]; do
+		echo -n "."
+		sleep 1
+		COUNT=$(($COUNT+1))
+	done
+	echo
+	if [ ! "$(pidof ffmpeg)" == "" ]; then
+		echo "Timeout waiting for image.  Killing ffmpeg and picam"
+		stop_ffmpeg
+	else
+		if [ ! -f /tmp/test.jpg ]; then
+			echo "Error detected with RTSP stream.  Restarting picam."
+			stop_picam
+		fi
+	fi
+	if [ -f /tmp/test.jpg ]; then
+		SIZE=$(du -s -b /tmp/test.jpg | sed -e 's/\t.*$//')
+	else
+		SIZE=0
+	fi
+	echo "Size: $SIZE"
+	get_mode
+	if [ ! "$SIZE" == "" ] && [ $SIZE -gt 0 ]; then
+		echo "$TIMESTAMP:$SIZE" > /tmp/$MODE.log
+	fi
+        if [ ! "$SIZE" == "" ] && [ $SIZE -lt $SIZETHRESHOLD ] && [ $SIZE -gt 0 ]; then
+		MODECHANGE=1
+                if [ $NIGHTMODE -eq 1 ]; then
+                        OPTIONS=$DAYOPTIONS
+			MODE="day"
+                else
+                        OPTIONS=$NIGHTOPTIONS
+			MODE="night"
+                fi
+                echo "Switching mode to $MODE - $OPTIONS"
+		stop_picam
+        fi
+}
+
+start_rtspserver() {
+	COUNT=0
+	RUNNING=0
+	rm -f /tmp/npm.run > /dev/null 2>&1
+	cd /scripts/node-rtsp-rtmp-server
+	./start_server.sh 2>&1 > /tmp/npm.run &
+	echo Starting RTSP Server
+	while [ $RUNNING -eq 0 ] && [ $COUNT -lt 120 ];
+	do
+		RUNNING=$(cat /tmp/npm.run | grep "server started on port 554" | wc -l)
+		COUNT=$((COUNT+1))
+		sleep 1
+		echo -n "."
+	done
+	echo ""
+	if [ -f /tmp/npm.run ]; then
+		echo "RTSP server is now running."
+		RTSPRUNNING=3
+	else
+		echo "RTSP server timed out while starting."
+	fi
+}
+
+
+RTSPRUNNING=$(ps -A S | grep "server.coffee" | wc -l)
+if [ ! $RTSPRUNNING -eq 3 ]; then
+	start_rtspserver
+fi
+
+if [ ! "$(pidof picam)" == "" ]; then
+	prevent_looping
+	if [ ! $OVERRIDEOPTIONS -eq 1 ]; then
+		get_options
+	fi
+fi
+
+if [ ! "`pidof picam`" == "" ]; then
+        echo "picam is already running"
+        exit
+fi
+
+echo "Starting picam"
+echo "/usr/bin/picam -v $BITRATE --rtspout $OPTIONS --metering matrix"
+/usr/bin/picam -v $BITRATE --rtspout $OPTIONS --metering matrix --time > /dev/null 2>&1 &
+
