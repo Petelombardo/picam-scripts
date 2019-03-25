@@ -152,28 +152,32 @@ start_rtspserver() {
 	COUNT=0
 	RUNNING=0
 	rm -f /tmp/npm.run > /dev/null 2>&1
+	rm -f /tmp/npm.starting
+	touch /tmp/npm.starting
 	cd /scripts/node-rtsp-rtmp-server
-	./start_server.sh 2>&1 > /tmp/npm.run &
+	./start_server.sh > /dev/null 2>&1 &
+#	./start_server.sh 2>&1 > /tmp/npm.run &
 	echo Starting RTSP Server
-	while [ $RUNNING -eq 0 ] && [ $COUNT -lt 120 ];
+	while [ $RUNNING -eq 0 ] && [ $COUNT -lt 300 ];
 	do
-		RUNNING=$(cat /tmp/npm.run | grep "server started on port 554" | wc -l)
+#		RUNNING=$(cat /tmp/npm.run | grep "server started on port 554" | wc -l)
+		RUNNING=$(netstat -tulpn | grep "node" | grep ":554" | wc -l)
 		COUNT=$((COUNT+1))
 		sleep 1
 		echo -n "."
 	done
 	echo ""
-	if [ -f /tmp/npm.run ]; then
+	if [ $RUNNING -eq 1 ]; then
 		echo "RTSP server is now running."
-		RTSPRUNNING=3
+		RTSPRUNNING=1
 	else
 		echo "RTSP server timed out while starting."
 	fi
 }
 
 
-RTSPRUNNING=$(ps -A S | grep "server.coffee" | wc -l)
-if [ ! $RTSPRUNNING -eq 3 ]; then
+RTSPRUNNING=$(netstat -tulpn | grep node | grep ":554" | wc -l)
+if [ ! $RTSPRUNNING -eq 1 ] && [ ! -f /tmp/npm.starting ]; then
 	start_rtspserver
 fi
 
@@ -190,6 +194,9 @@ if [ ! "`pidof picam`" == "" ]; then
 fi
 
 echo "Starting picam"
+if [ -f /tmp/npm.starting ]; then
+	rm -f /tmp/npm.starting
+fi
 echo "/usr/bin/picam -v $BITRATE --rtspout $OPTIONS --metering matrix"
-/usr/bin/picam -v $BITRATE --rtspout $OPTIONS --metering matrix --time > /dev/null 2>&1 &
+/usr/bin/picam -v $BITRATE --rtspout $OPTIONS --metering matrix --time > /dev/null 2>&1 || reboot &
 
