@@ -179,6 +179,9 @@ start_rtspserver() {
 RTSPRUNNING=$(netstat -tulpn | grep node | grep ":554" | wc -l)
 if [ ! $RTSPRUNNING -eq 1 ] && [ ! -f /tmp/npm.starting ]; then
 	start_rtspserver
+elif [ -f /tmp/npm.starting ]; then
+	echo "Waiting for node to start from a previous run.  Exiting."
+	exit
 fi
 
 if [ ! "$(pidof picam)" == "" ]; then
