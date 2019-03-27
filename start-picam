@@ -180,7 +180,6 @@ RTSPRUNNING=$(netstat -tulpn | grep node | grep ":554" | wc -l)
 if [ ! $RTSPRUNNING -eq 1 ] && [ ! -f /tmp/npm.starting ]; then
 	start_rtspserver
 elif [ -f /tmp/npm.starting ]; then
-<<<<<<< HEAD
 	OLDTIMESTAMP=$(cat /tmp/npm.starting)
 	DIFF=$((TIMESTAMP-OLDTIMESTAMP))
 	if [ $DIFF -lt 600 ]; then
@@ -190,10 +189,6 @@ elif [ -f /tmp/npm.starting ]; then
 		echo "Node should have completed starting by now.  Removing the lock and trying to start picam."
 		rm -f /tmp/npm.starting
 	fi
-=======
-	echo "Waiting for node to start from a previous run.  Exiting."
-	exit
->>>>>>> 6cedabbd642e7246005c7c1527e2108ca0840ffa
 fi
 
 if [ ! "$(pidof picam)" == "" ]; then
