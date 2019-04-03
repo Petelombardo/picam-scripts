@@ -193,7 +193,7 @@ fi
 
 if [ ! "$(pidof picam)" == "" ]; then
 	prevent_looping
-	if [ ! $OVERRIDEOPTIONS -eq 1 ]; then
+	if [ ! $OVERRIDEOPTIONS -eq 1 ] && [ $DAYNIGHTAUTO -eq 1 ]; then
 		get_options
 	fi
 fi
