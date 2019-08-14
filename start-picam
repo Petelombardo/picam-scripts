@@ -9,6 +9,7 @@ OPTIONS="$DAYOPTIONS $DEFAULTOPTIONS"
 MODECHANGE=0
 MODE="day"
 OVERRIDEOPTIONS=0
+CHECKNET=0
 
 stop_picam() {
 	echo "Stopping picam"
@@ -85,6 +86,21 @@ get_mode() {
                 MODE="day"
         fi
 	echo "Current mode: $MODE"
+}
+
+check_connectivity() {
+	GATEWAY=$(route -n | grep "^0.0.0.0" | cut -d' ' -f2- | sed -e 's/^  *//' | cut -d' ' -f1)
+	PINGTEST=$(ping -c 1 $GATEWAY || echo "FAILURE")
+	CHECKNET=$((CHECKNET +1))
+	if [ "$PINGTEST" == "FAILURE" ] && [ $CHECKNET -le 2 ]; then
+		check_connectivity
+		if [ "$PINGTEST" == "FAILURE" ]; then
+			echo "Lost connectivity.  Rebooting"
+			reboot
+		fi
+	else
+		echo "Connectivity is working great."
+	fi
 }
 
 
@@ -175,6 +191,7 @@ start_rtspserver() {
 	fi
 }
 
+check_connectivity
 
 RTSPRUNNING=$(netstat -tulpn | grep node | grep ":554" | wc -l)
 if [ ! $RTSPRUNNING -eq 1 ] && [ ! -f /tmp/npm.starting ]; then
